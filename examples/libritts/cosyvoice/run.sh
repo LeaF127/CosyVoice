@@ -2,49 +2,53 @@
 # Copyright 2024 Alibaba Inc. All Rights Reserved.
 . ./path.sh || exit 1;
 
-stage=-1
+stage=3
 stop_stage=3
 
+
 data_url=www.openslr.org/resources/60
-data_dir=/mnt/lyuxiang.lx/data/tts/openslr/libritts
+data_dir=D:/TTSDatasets/libritts
 pretrained_model_dir=../../../pretrained_models/CosyVoice-300M
+
+datasets_list="train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other"
+datasets_list_my="dev-clean dev-other test-clean test-other"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
   echo "Data Download"
-  for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360 train-other-500; do
+  for part in $datasets_list_my; do
     local/download_and_untar.sh ${data_dir} ${data_url} ${part}
   done
 fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   echo "Data preparation, prepare wav.scp/text/utt2spk/spk2utt"
-  for x in train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other; do
+  for x in $datasets_list_my; do
     mkdir -p data/$x
-    python local/prepare_data.py --src_dir $data_dir/LibriTTS/$x --des_dir data/$x
+    D:/Anaconda3/envs/cosyvoice/python.exe local/prepare_data.py --src_dir $data_dir/LibriTTS/$x --des_dir data/$x
   done
 fi
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
   echo "Extract campplus speaker embedding, you will get spk2embedding.pt and utt2embedding.pt in data/$x dir"
-  for x in train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other; do
-    tools/extract_embedding.py --dir data/$x \
+  for x in $datasets_list_my; do
+    D:/Anaconda3/envs/cosyvoice/python.exe tools/extract_embedding.py --dir data/$x \
       --onnx_path $pretrained_model_dir/campplus.onnx
   done
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   echo "Extract discrete speech token, you will get utt2speech_token.pt in data/$x dir"
-  for x in train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other; do
-    tools/extract_speech_token.py --dir data/$x \
+  for x in $datasets_list_my; do
+    D:/Anaconda3/envs/cosyvoice/python.exe tools/extract_speech_token.py --dir data/$x \
       --onnx_path $pretrained_model_dir/speech_tokenizer_v1.onnx
   done
 fi
 
 if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
   echo "Prepare required parquet format data, you should have prepared wav.scp/text/utt2spk/spk2utt/utt2embedding.pt/spk2embedding.pt/utt2speech_token.pt"
-  for x in train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other; do
+  for x in $datasets_list_my; do
     mkdir -p data/$x/parquet
-    tools/make_parquet_list.py --num_utts_per_parquet 1000 \
+    D:/Anaconda3/envs/cosyvoice/python.exe tools/make_parquet_list.py --num_utts_per_parquet 1000 \
       --num_processes 10 \
       --src_dir data/$x \
       --des_dir data/$x/parquet
@@ -55,7 +59,7 @@ fi
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
   echo "Run inference. Please make sure utt in tts_text is in prompt_data"
   for mode in sft zero_shot; do
-    python cosyvoice/bin/inference.py --mode $mode \
+    D:/Anaconda3/envs/cosyvoice/python.exe cosyvoice/bin/inference.py --mode $mode \
       --gpu 0 \
       --config conf/cosyvoice.yaml \
       --prompt_data data/test-clean/parquet/data.list \
@@ -111,7 +115,7 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
   for model in llm flow hifigan; do
     decode_checkpoint=`pwd`/exp/cosyvoice/$model/$train_engine/${model}.pt
     echo "do model average and final checkpoint is $decode_checkpoint"
-    python cosyvoice/bin/average_model.py \
+    D:/Anaconda3/envs/cosyvoice/python.exe cosyvoice/bin/average_model.py \
       --dst_model $decode_checkpoint \
       --src_path `pwd`/exp/cosyvoice/$model/$train_engine  \
       --num ${average_num} \
@@ -121,6 +125,6 @@ fi
 
 if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ]; then
   echo "Export your model for inference speedup. Remember copy your llm or flow model to model_dir"
-  python cosyvoice/bin/export_jit.py --model_dir $pretrained_model_dir
-  python cosyvoice/bin/export_onnx.py --model_dir $pretrained_model_dir
+  D:/Anaconda3/envs/cosyvoice/python.exe cosyvoice/bin/export_jit.py --model_dir $pretrained_model_dir
+  D:/Anaconda3/envs/cosyvoice/python.exe cosyvoice/bin/export_onnx.py --model_dir $pretrained_model_dir
 fi

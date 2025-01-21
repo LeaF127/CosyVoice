@@ -54,11 +54,12 @@ sizes_old="371012589 347390293 379743611 361838298 6420417880 23082659865 306267
 # sizes_new is the archive file sizes of the final release.  Some of these sizes are of
 # things we probably won't download.
 sizes_new="337926286 314305928 695964615 297279345 87960560420 33373768 346663984 328757843 6387309499 23049477885 30593501606"
+sizes_my="924804676 1230670113 964502297 7723686890 1291469655"
 
 if [ -f $data/$part.tar.gz ]; then
   size=$(/bin/ls -l $data/$part.tar.gz | awk '{print $5}')
   size_ok=false
-  for s in $sizes_old $sizes_new; do if [ $s == $size ]; then size_ok=true; fi; done
+  for s in $sizes_old $sizes_new $sizes_my; do if [ $s == $size ]; then size_ok=true; fi; done
   if ! $size_ok; then
     echo "$0: removing existing file $data/$part.tar.gz because its size in bytes $size"
     echo "does not equal the size of one of the archives."
