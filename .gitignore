@@ -36,6 +36,8 @@ data
 raw_wav
 tensorboard
 **/*build*
+output
+pyscript
 
 # Clangd files
 .cache
