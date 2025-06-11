@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+web/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -50,3 +51,8 @@ pretrained_models/*
 *_pb2_grpc.py
 *_pb2.py
 *.tar
+
+# web test files
+web/test/*
+web/static/*
+test.py

@@ -127,3 +127,21 @@ def export_cosyvoice2_vllm(model, model_path, device):
     model.llm.model.config.vocab_size = tmp_vocab_size
     model.llm.model.config.tie_word_embeddings = tmp_tie_embedding
     model.llm.model.set_input_embeddings(embed_tokens)
+
+def concatenate_wavs(waveforms):
+    """
+    拼接多个波形
+    
+        waveforms (List[Tensor]): 待拼接的波形列表，每个波形形状为 [通道数, 时间步长]
+    """
+    if not waveforms:
+        raise ValueError("波形列表不能为空")
+
+    num_channels = waveforms[0].size(0)
+    for wav in waveforms:
+        if wav.size(0) != num_channels:
+            raise ValueError("所有波形的通道数必须一致")
+
+    combined_waveform = torch.cat(waveforms, dim=1)
+        
+    return combined_waveform
