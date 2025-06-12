@@ -56,3 +56,4 @@ pretrained_models/*
 web/test/*
 web/static/*
 test.py
+runtime/python/fastapi/nohup.out
