@@ -56,3 +56,9 @@ pretrained_models/*
 web/test/*
 web/static/*
 test.py
+
+# 中闽词表
+asset/bilingual_dict_v1.txt
+
+# logs
+logs/
