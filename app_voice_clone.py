@@ -2,10 +2,12 @@ import os, time, sys, shutil, io
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, make_response, Response
 from flask_cors import CORS
+import requests
 import subprocess
 import torch, torchaudio
 from cosyvoice.cli.cosyvoice import CosyVoice2
 from cosyvoice.utils.file_utils import load_wav
+from typing import Union
 
 # 路径配置
 root_dir = Path(__file__).parent.as_posix()
@@ -25,7 +27,25 @@ CORS(app)
 # 解析请求参数
 def get_params(req):
     text = req.args.get("text", "").strip() or req.form.get("text", "").strip()
-    reference_audio = req.args.get("reference_audio") or req.form.get("reference_audio")
+    speed = float(req.form.get("speed", 1.0))
+    
+    # 支持上传音频/url
+    if 'wav_file' in req.files:
+        file = req.files['wav_file']
+        reference_audio = io.BytesIO(file.read())
+    # 从url获取prompt音频
+    elif 'wav_url' in req.form:
+        url = req.form.get("wav_url", "")
+        if url.startwith("https://") or url.startwith("http://"):
+            try:
+                r = requests.get(url, timeout=10)
+                r.raise_for_status()
+                reference_audio = io.BytesIO(r.content)
+                print(f"[INFO] 成功下载提示音频：{url}")
+            except Exception as e:
+                raise RuntimeError(f"下载参考音频失败：{e}")
+    else:
+        reference_audio = req.args.get("reference_audio") or req.form.get("reference_audio")  
     
     if not reference_audio:
         reference_audio = os.path.join(root_dir, "asset/zero_shot_prompt.wav")
@@ -34,24 +54,34 @@ def get_params(req):
     return {
         "text": text,
         "reference_audio": reference_audio,
-        "speed": float(req.args.get("speed", req.form.get("speed", 1.0)))
+        "speed": speed
     }
 
-def convert_audio_to_16k(reference_audio_path: str) -> io.BytesIO:
+def convert_audio_to_16k(reference_audio: Union[str, io.BytesIO]) -> io.BytesIO:
     """
     使用 ffmpeg 将任意格式的参考音频转换为 16kHz 单声道，并写入 BytesIO 对象。
     防止保存为本地文件。
     """
+    # 从二进制流中读取音频
+    if isinstance(reference_audio, io.BytesIO):
+        reference_audio.seek(0)
+        input_data = reference_audio.read()
+        input_pipe = "pipe:0"
+    else:
+        input_data = None
+        input_pipe = reference_audio # 默认音频路径
+    
     try:
         process = subprocess.run(
             [
                 "ffmpeg", "-hide_banner", "-y",
-                "-i", reference_audio_path,
+                "-i", input_pipe,
                 "-ar", "16000",
-                "-ac", "1",  # 强制单声道
+                "-ac", "1",   # 强制单声道
                 "-f", "wav",  # 强制输出格式为 wav
                 "pipe:1"      # 输出到 stdout
             ],
+            input=input_data,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True
@@ -69,9 +99,11 @@ def batch(params):
     global tts_model
     if not shutil.which("ffmpeg"):
         raise RuntimeError("系统未安装 ffmpeg")
-    if not os.path.exists(params["reference_audio"]):
-        raise FileNotFoundError(f"参考音频不存在: {params['reference_audio']}")
     
+    if isinstance(params["reference_audio"], str):
+        if not os.path.exists(params["reference_audio"]):
+            raise FileNotFoundError(f"参考音频不存在: {params['reference_audio']}")
+        
     # 加载音频并调用模型合成    
     try:
         buffer = convert_audio_to_16k(params["reference_audio"])
@@ -79,7 +111,7 @@ def batch(params):
         # prompt = load_wav(params['reference_audio'], target_sr=16000)
         instruct = "请用自然的语气说这句话"
         audio_list = []
-        for out in tts_model.inference_instruct2(params["text"], instruct, prompt, stream=True, speed=params["speed"]):
+        for out in tts_model.inference_instruct2(params["text"], instruct, prompt, stream=False, speed=params["speed"]):
             audio_list.append(out["tts_speech"])
         audio = torch.cat(audio_list, dim=1)
         
@@ -113,6 +145,6 @@ def tts():
 
 # 启动服务
 if __name__ == "__main__":
-    tts_model = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=False, load_trt=False, load_vllm=False, fp16=True)
+    tts_model = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=True, load_trt=False, load_vllm=False, fp16=True)
     print("🚀 接口启动成功：http://127.0.0.1:15532/tts")
     app.run(host="127.0.0.1", port=15532)
