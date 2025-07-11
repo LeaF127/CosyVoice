@@ -61,4 +61,4 @@ test.py
 asset/bilingual_dict_v1.txt
 
 # logs
-logs/
+*.log
