@@ -24,6 +24,15 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   done
 fi
 
+if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
+  echo "Prepare negative samples using CosyVoice2-0.5B, this is also our reference model.
+    Here we use CosyVoice2-0.5B generated audio as reject sample for simplicity, you can use metric like wer/similarity."
+  for x in train-clean-100 train-clean-360 train-other-500; do
+    mkdir -p data/${x}_reject
+    python local/prepare_reject_sample.py --src_dir data/$x --des_dir data/${x}_reject --ref_model $pretrained_model_dir
+  done
+fi
+
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
   echo "Extract campplus speaker embedding, you will get spk2embedding.pt and utt2embedding.pt in data/$x dir"
   for x in train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other; do
@@ -34,7 +43,7 @@ fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   echo "Extract discrete speech token, you will get utt2speech_token.pt in data/$x dir"
-  for x in train-clean-100 train-clean-360 train-other-500 dev-clean dev-other test-clean test-other; do
+  for x in train-clean-100 train-clean-360 train-other-500 train-clean-100_reject train-clean-360_reject dev-clean dev-other test-clean test-other; do
     tools/extract_speech_token.py --dir data/$x \
       --onnx_path $pretrained_model_dir/speech_tokenizer_v2.onnx
   done
@@ -46,6 +55,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     mkdir -p data/$x/parquet
     tools/make_parquet_list.py --num_utts_per_parquet 1000 \
       --num_processes 10 \
+      --dpo \
       --src_dir data/$x \
       --des_dir data/$x/parquet
   done
@@ -66,8 +76,8 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
   fi
   cat data/{train-clean-100,train-clean-360,train-other-500}/parquet/data.list > data/train.data.list
   cat data/{dev-clean,dev-other}/parquet/data.list > data/dev.data.list
-  # NOTE will update llm/hift training later
-  for model in llm flow hifigan; do
+  # NOTE only llm supports dpo
+  for model in llm; do
     torchrun --nnodes=1 --nproc_per_node=$num_gpus \
         --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint="localhost:1234" \
       cosyvoice/bin/train.py \
@@ -78,6 +88,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
       --qwen_pretrain_path $pretrained_model_dir/CosyVoice-BlankEN \
       --model $model \
       --checkpoint $pretrained_model_dir/$model.pt \
+      --ref_model $pretrained_model_dir/llm.pt \
       --model_dir `pwd`/exp/cosyvoice2/$model/$train_engine \
       --tensorboard_dir `pwd`/tensorboard/cosyvoice2/$model/$train_engine \
       --ddp.dist_backend $dist_backend \
@@ -85,6 +96,7 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
       --prefetch ${prefetch} \
       --pin_memory \
       --use_amp \
+      --dpo \
       --deepspeed_config ./conf/ds_stage2.json \
       --deepspeed.save_states model+optimizer
   done
