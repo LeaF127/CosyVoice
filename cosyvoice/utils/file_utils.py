@@ -41,12 +41,20 @@ def read_json_lists(list_file):
     return results
 
 
-def load_wav(wav, target_sr):
-    speech, sample_rate = torchaudio.load(wav, backend='soundfile')
-    speech = speech.mean(dim=0, keepdim=True)
+def load_wav(wav, target_sr, duration=None):
+    speech, sample_rate = torchaudio.load(wav)
+    speech = speech.mean(dim=0, keepdim=True) # 转为单声道
     if sample_rate != target_sr:
         assert sample_rate > target_sr, 'wav sample rate {} must be greater than {}'.format(sample_rate, target_sr)
         speech = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=target_sr)(speech)
+        sample_rate = target_sr # 更新采样率为目标采样率
+        
+    if duration is not None:
+        num_samples = int(duration * sample_rate)
+        if speech.shape[1] >= num_samples:
+            speech = speech[:, :num_samples]
+        # 否则保留原始长度
+        
     return speech
 
 
