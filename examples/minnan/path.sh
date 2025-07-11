@@ -1,0 +1,1 @@
+../vietnamese/path.sh
