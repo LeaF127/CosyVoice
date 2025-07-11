@@ -9,8 +9,10 @@ from cosyvoice.cli.cosyvoice import CosyVoice2
 from cosyvoice.utils.file_utils import load_wav
 from typing import Union
 
-# 路径配置
+# 固定参数
 root_dir = Path(__file__).parent.as_posix()
+host = "0.0.0.0"
+port = 9396
 
 # ffmpeg 环境变量（确保运行时可以找到）
 if sys.platform == "win32":
@@ -124,7 +126,7 @@ def batch(params):
         print(f"[ERROR] 合成音频失败: {e}")
     
 # 主接口
-@app.route("/tts", methods=["POST", "GET"])
+@app.route("/cv2tts", methods=["POST", "GET"])
 def tts():
     try:
         # 处理request，获取params
@@ -145,6 +147,12 @@ def tts():
 
 # 启动服务
 if __name__ == "__main__":
-    tts_model = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=True, load_trt=False, load_vllm=False, fp16=True)
-    print("🚀 接口启动成功：http://127.0.0.1:15532/tts")
-    app.run(host="127.0.0.1", port=15532)
+    tts_model = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=False, load_trt=False, load_vllm=False, fp16=False)
+    print(f"🚀 接口启动成功：http://{host}:{port}/tts")
+    
+    app.run(host=host, port=port)
+
+# TODO 
+# - 改为流式输出
+# - 训中英闽模型然后替换
+# - vllm加速
