@@ -1,1 +1,0 @@
-/work2/yjt/CosyVoice/examples/libritts/cosyvoice2/path.sh
