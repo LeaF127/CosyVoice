@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from functools import partial
+# import sys # 禁用 ttsfrd
+# sys.modules['ttsfrd'] = None
 from typing import Generator
 import json
 import onnxruntime
