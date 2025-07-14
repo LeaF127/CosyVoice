@@ -9,6 +9,11 @@ from cosyvoice.cli.cosyvoice import CosyVoice2
 from cosyvoice.utils.file_utils import load_wav
 from typing import Union
 
+# vllm
+from vllm import ModelRegistry
+from cosyvoice.vllm.cosyvoice2 import CosyVoice2ForCausalLM
+ModelRegistry.register_model("CosyVoice2ForCausalLM", CosyVoice2ForCausalLM)
+
 # 固定参数
 root_dir = Path(__file__).parent.as_posix()
 host = "0.0.0.0"
@@ -24,7 +29,7 @@ sys.path.append(f'{root_dir}/third_party/Matcha-TTS') # 添加第三方组件 Ma
 
 # Flask 配置
 app = Flask(__name__)
-CORS(app)
+# CORS(app)
 
 # 解析请求参数
 def get_params(req):
@@ -147,7 +152,7 @@ def tts():
 
 # 启动服务
 if __name__ == "__main__":
-    tts_model = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=False, load_trt=False, load_vllm=False, fp16=False)
+    tts_model = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=True, load_trt=True, load_vllm=True, fp16=True)
     print(f"🚀 接口启动成功：http://{host}:{port}/tts")
     
     app.run(host=host, port=port)
