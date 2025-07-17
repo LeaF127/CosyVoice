@@ -5,65 +5,28 @@
 stage=1
 stop_stage=1
 
-data_dir=/data1/data_from_58135
-pretrained_model_dir=../../../pretrained_models/CosyVoice2-0.5B
+data_dir=/root/gpufree-data/data
+pretrained_model_dir=../../pretrained_models/CosyVoice2-0.5B
 # 用来复制
-TRAIN_DATASETS=biaobei_minnan
-DEV_DATASETS=HWB_modified
+TRAIN_DATASETS=(
+  "/root/gpufree-data/data/LibriTTS/train-clean-100/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/LibriTTS/test-clean/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/LibriTTS/test-other/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/LibriTTS/dev-clean/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/biaobei/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/HWB_modified/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/jiangpeng/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/minnan-female/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/minnan-male/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/taiwan-hokkien/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/vivos/train/cosyvoice_map_folder/parquet/data.list"
+)
+DEV_DATASETS=(
+  "/root/gpufree-data/data/LibriTTS/dev-other/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/minnan/zhongxun/cosyvoice_map_folder/parquet/data.list"
+  "/root/gpufree-data/data/vivos/test/cosyvoice_map_folder/parquet/data.list"
+)
 
-
-# inference
-if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
-  echo "Data preparation, prepare wav.scp/text/utt2spk/spk2utt"
-  for x in dev test train; do
-    mkdir -p data/$x
-    python local/prepare_data.py --src_dir $data_dir/$x --des_dir data/$x
-  done
-fi
-
-if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
-  echo "Extract campplus speaker embedding, you will get spk2embedding.pt and utt2embedding.pt in data/$x dir"
-  for x in dev test train; do
-    tools/extract_embedding.py --dir data/$x \
-      --onnx_path $pretrained_model_dir/campplus.onnx
-  done
-fi
-
-if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-  echo "Extract discrete speech token, you will get utt2speech_token.pt in data/$x dir"
-  for x in dev test train; do
-    tools/extract_speech_token.py --dir data/$x \
-      --onnx_path $pretrained_model_dir/speech_tokenizer_v1.onnx
-  done
-fi
-
-if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
-  echo "Prepare required parquet format data, you should have prepared wav.scp/text/utt2spk/spk2utt/utt2embedding.pt/spk2embedding.pt/utt2speech_token.pt"
-  for x in dev test train; do
-    mkdir -p data/$x/parquet
-    tools/make_parquet_list.py --num_utts_per_parquet 1000 \
-      --num_processes 10 \
-      --src_dir data/$x \
-      --des_dir data/$x/parquet
-  done
-fi
-
-# inference
-if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
-  echo "Run inference. Please make sure utt in tts_text is in prompt_data"
-  for mode in sft zero_shot; do
-    python cosyvoice/bin/inference.py --mode $mode \
-      --gpu 0 \
-      --config conf/cosyvoice.yaml \
-      --prompt_data data/test/parquet/data.list \
-      --prompt_utt2data data/test/parquet/utt2data.list \
-      --tts_text `pwd`/tts_text.json \
-      --llm_model $pretrained_model_dir/llm.pt \
-      --flow_model $pretrained_model_dir/flow.pt \
-      --hifigan_model $pretrained_model_dir/hift.pt \
-      --result_dir `pwd`/exp/cosyvoice/test/$mode
-  done
-fi
 
 # train llm
 export CUDA_VISIBLE_DEVICES="0"
@@ -79,8 +42,12 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     echo "Notice deepspeed has its own optimizer config. Modify conf/ds_stage2.json if necessary"
   fi
   # 将几个数据集的数据文件连接起来
-  cat $data_dir/biaobei_minnan/cosyvoice_map_folder/parquet/data.list > data/train.data.list
-  cat $data_dir/HWB_modified/cosyvoice_map_folder/parquet/data.list > data/dev.data.list
+  for file in "${TRAIN_DATASETS[@]}"; do
+    cat "$file" >> data/train.data.list
+  done
+  for file in "${DEV_DATASETS[@]}"; do
+    cat "$file" >> data/dev.data.list
+  done
   # NOTE will update llm/hift training later
   for model in llm; do
     torchrun --nnodes=1 --nproc_per_node=$num_gpus \
@@ -93,8 +60,8 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
       --qwen_pretrain_path $pretrained_model_dir/CosyVoice-BlankEN \
       --model $model \
       --checkpoint $pretrained_model_dir/$model.pt \
-      --model_dir `pwd`/exp/cosyvoice2/$model/$train_engine \
-      --tensorboard_dir `pwd`/tensorboard/cosyvoice2/$model/$train_engine \
+      --model_dir `pwd`/exp/$model/$train_engine \
+      --tensorboard_dir `pwd`/tensorboard/$model/$train_engine \
       --ddp.dist_backend $dist_backend \
       --num_workers ${num_workers} \
       --prefetch ${prefetch} \

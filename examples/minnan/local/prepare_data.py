@@ -1,3 +1,5 @@
+# 适用于文本全在一个txt文件的
+
 import argparse
 import logging
 import glob
@@ -9,29 +11,44 @@ logger = logging.getLogger()
 
 
 def main():
-    wavs = list(glob.glob('{}/*/*/*wav'.format(args.src_dir)))
+    if 'vivos' in args.src_dir:
+        wavs = list(glob.glob('{}/*/*/*wav'.format(args.src_dir)))
+    else:
+        wavs = list(glob.glob('{}/*/*wav'.format(args.src_dir)))
     
     # 先读入全部文本内容到字典
-    txt = os.path.join(args.src_dir, 'prompts.txt')
+    txt = os.path.join(args.src_dir, 'text.txt')
     if not os.path.exists(txt):
-        logger.warning('{} does not exist'.format(txt))
-        return
+        logger.warning('{} does not exist, try load prompts.txt'.format(txt))
+        txt = os.path.join(args.src_dir, 'prompts.txt')
     utt2content = {}
     with open(txt, encoding='utf-8') as f:
         for line in f:
             parts = line.strip().split(maxsplit=1)
             if len(parts) == 2:
                 utt_id, text = parts
-                utt2content[utt_id] = ''.join('<|vi|>'+text)
-
+                if 'vivos' in args.src_dir:
+                    utt2content[utt_id] = ''.join('<|vi|>'+text)
+                else:
+                    utt2content[utt_id] = ''.join('<|min|>'+text)
+                    
     # 初始化映射表
     utt2wav, utt2text, utt2spk, spk2utt = {}, {}, {}, {}
     for wav in tqdm(wavs):
         utt = os.path.basename(wav).replace('.wav', '') # 语音id
-        spk = utt.split('_')[0] # 说话人id
+        if 'vivos' in args.src_dir:
+            spk = utt.split('_')[0] # 说话人id
+        else:
+            parts = utt.split('-')
+            if len(parts) == 2:
+                spk = parts[0]
+            elif len(parts) == 3:
+                spk = parts[0] + '-' + parts[1]
+            else:
+                raise Exception(f'意料之外的格式\nwav：{wav}\nutt：{utt}\n分割后：{parts}')
         # 查找对应文本内容
         if utt not in utt2content:
-            logger.warning('Utterance {} not found in prompts.txt'.format(utt))
+            logger.warning('Utterance {} not found in {}'.format(utt, txt))
             continue
         content = utt2content[utt]
                    
